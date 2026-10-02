@@ -4,7 +4,7 @@
 // Nota: los DOMs de estos sitios cambian con frecuencia; si uno deja de funcionar,
 // agrega otro dominio espejo en SCRAPER_CONFIG o un nuevo scraper con la misma firma.
 
-const { slugify, cleanText, guessQuality, sortStreams, hostOf, browserFetch } = require('./util');
+const { slugify, cleanText, sortStreams, hostOf, browserFetch } = require('./util');
 const { sortedBases } = require('./health');
 
 // ---- CONFIG --------------------------------------------------------------
@@ -31,78 +31,47 @@ const SCRAPER_CONFIG = {
     enabled: true,
     baseUrls: ['https://archive.org'],
   },
+  // ---- Fuentes adicionales en español latino (misma familia WordPress) ----
+  // Estos sitios suelen compartir CMS/estructura: buscador /?s=, fichas
+  // /pelicula/<slug> y /serie/<slug>. Agrega dominios espejo cuando cambien.
+  cinecalidad: {
+    enabled: true,
+    baseUrls: [
+      'https://www.cinecalidad.to',
+      'https://cinecalidad.fr',
+      'https://www.cinecalidad.futbol',
+    ],
+  },
+  pelis4du: {
+    enabled: true,
+    baseUrls: [
+      'https://pelis4du.co',
+      'https://www.pelis4du.video',
+    ],
+  },
+  serieslatino: {
+    enabled: true,
+    baseUrls: [
+      'https://serieslatino.me',        // serie-página con ?s=
+      'https://www.serieslatino.pw',
+    ],
+  },
+  dodoplay: {
+    enabled: true,
+    baseUrls: [
+      'https://dodoplay.com',
+      'https://dodoplay.net',
+    ],
+  },
+  metavidrios: {
+    enabled: true,
+    baseUrls: ['https://metavidrios.com'],
+  },
 };
 // ---------------------------------------------------------------------------
 
-// Prueba varios dominios espejo hasta que uno responda.
-// Usa el orden del health-check: dominios sanos primero, caídos al final.
-async function fetchFirstAvailable(paths, cfg) {
-  let lastErr;
-  for (const base of sortedBases(cfg.baseUrls)) {
-    for (const p of paths) {
-      const url = base + p;
-      try {
-        const html = await browserFetch(url);
-        return { url, html, base };
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-  }
-  throw lastErr || new Error('Ningún dominio respondió');
-}
-
-// Extrae enlaces de video directo (.m3u8 / .mp4) del HTML, con su nombre cercano
-function extractDirectLinks(html) {
-  const out = [];
-  const seen = new Set();
-  // src="...m3u8" / file: "...mp4" / data-video="..." etc.
-  const re = /(?:src|href|data-(?:src|video|file)|file|url)\s*[:=]\s*["']([^"']+?\.(?:m3u8|mp4|mkv)(?:\?[^"']*)?)["']/gi;
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    const u = m[1];
-    if (seen.has(u)) continue;
-    if (u.startsWith('data:') || u.includes('preload')) continue;
-    seen.add(u);
-    out.push(u);
-  }
-  return out;
-}
-
-// Extrae servidores/embeds embebidos (iframe, playerjs, jwplayer sources...)
-function extractEmbeds(html, base) {
-  const out = [];
-  const seen = new Set();
-  const reIframe = /<iframe[^>]+src=["']([^"']+)["'][^>]*>/gi;
-  let m;
-  while ((m = reIframe.exec(html)) !== null) {
-    let u = m[1];
-    if (!u.startsWith('http')) u = base + (u.startsWith('/') ? '' : '/') + u;
-    if (seen.has(u)) continue;
-    seen.add(u);
-    out.push(u);
-  }
-  return out;
-}
-
-function streamFromUrl(url, label, extraName) {
-  const q = guessQuality(url) || guessQuality(label);
-  const host = hostOf(url);
-  const isHls = /\.m3u8/i.test(url);
-  const isMp4 = /\.(mp4|mkv)(\?|$)/i.test(url);
-  return {
-    name: `🎬 ${extraName || 'LATINO'}`,
-    title: [
-      `${label || host}${q ? ' ' + q : ''}`,
-      isHls ? '(HLS)' : isMp4 ? '(MP4)' : '(Embed)',
-      host,
-    ]
-      .filter(Boolean)
-      .join(' · '),
-    url,
-    behaviorHints: { notWebReady: !isHls && !isMp4, bingeGroup: `lat-${host}` },
-  };
-}
+// Helpers compartidos (fetch con espejos, extracción de enlaces/embeds, streams)
+const { fetchFirstAvailable, extractDirectLinks, extractEmbeds, streamFromUrl } = require('./core');
 
 // ===================== SCRAPER: PELICULIFY =================================
 // URLs típicas: /pelicula/<slug> y /serie/<slug>-temporada-N-capitulo-M
@@ -273,11 +242,28 @@ async function scrapeArchiveOrg(type, meta) {
 }
 
 // ===================== AGREGADOR ============================================
+// Fuentes de la familia WordPress (Cinecalidad y similares) usan el scraper
+// genérico scrapeWpLatino en lugar de uno propio por sitio.
+const { scrapeWpLatino } = require('./sources-latino');
+
+const WP_SITES = [
+  { id: 'cinecalidad', name: 'Cinecalidad', emoji: '🎥' },
+  { id: 'pelis4du', name: 'Pelis4Du', emoji: '🍿' },
+  { id: 'serieslatino', name: 'SeriesLatino', emoji: '📺' },
+  { id: 'dodoplay', name: 'DoDoPlay', emoji: '▶️' },
+  { id: 'metavidrios', name: 'MetaVidrios', emoji: '🪟' },
+];
+
 const SCRAPERS = [
   { id: 'peliculify', fn: scrapePeliculify },
   { id: 'noveleria', fn: scrapeNoveleria },
   { id: 'veohLatino', fn: scrapeVeoh },
   { id: 'archiveLatino', fn: scrapeArchiveOrg },
+  ...WP_SITES.map((w) => ({
+    id: w.id,
+    fn: (type, meta) =>
+      scrapeWpLatino(w.name, w.emoji, type, meta, SCRAPER_CONFIG[w.id]),
+  })),
 ];
 
 async function scrapeAll(type, meta) {
@@ -297,4 +283,4 @@ async function scrapeAll(type, meta) {
   });
 }
 
-module.exports = { scrapeAll, SCRAPER_CONFIG, extractDirectLinks, extractEmbeds, streamFromUrl };
+module.exports = { scrapeAll, SCRAPER_CONFIG };

@@ -81,3 +81,27 @@ Los sanos se prueban primero al scrapear; los caídos van al final y se re-inten
 
 Si un sitio cambia tanto que el scraper ya no extrae enlaces (aunque el dominio responda),
 ese scraper necesita actualización de selectores/regex: revisa el HTML con `curl` y ajusta la función.
+
+
+## Fuentes latinas incluidas (v2.1)
+
+Todas vía HTTPS/embed (sin torrents):
+
+| Fuente | Tipo | Dominios espejo |
+|---|---|---|
+| Peliculify | scrapper propio | peliculify.com / .net / peliculasdk.com |
+| Noveleria | scrapper propio | noveleria.net |
+| Veoh Latino | API + HTML | veoh.com |
+| Archive.org | API JSON (legal) | archive.org |
+| Cinecalidad | scraper genérico WP | cinecalidad.to / .fr / .futbol |
+| Pelis4Du | scraper genérico WP | pelis4du.co / .video |
+| SeriesLatino | scraper genérico WP | serieslatino.me / .pw |
+| DoDoPlay | scraper genérico WP | dodoplay.com / .net |
+| MetaVidrios | scraper genérico WP | metavidrios.com |
+
+### Agregar una fuente nueva de la familia WordPress (Cinecalidad-like)
+1. En `lib/scrape.js` → `SCRAPER_CONFIG`: añade `{ micuevafuente: { enabled: true, baseUrls: ['https://...'] } }`
+2. En la lista `WP_SITES` del mismo archivo: `{ id: 'micuevafuente', name: 'MiFuente', emoji: '🎞️' }`
+3. Reinicia. El health-check (`/health`) ya la monitorea automáticamente.
+
+Si el sitio no usa el CMS tipo WordPress (?s= + fichas /pelicula//serie/), escribe un scraper con la firma `(type, meta)` en `lib/scrape.js` y regístralo en `SCRAPERS`.
