@@ -105,3 +105,22 @@ Todas vía HTTPS/embed (sin torrents):
 3. Reinicia. El health-check (`/health`) ya la monitorea automáticamente.
 
 Si el sitio no usa el CMS tipo WordPress (?s= + fichas /pelicula//serie/), escribe un scraper con la firma `(type, meta)` en `lib/scrape.js` y regístralo en `SCRAPERS`.
+
+## v2.1 — Catálogos estilo "Addon Latam" (búsqueda + nuevos estrenos)
+
+El manifest ahora expone 3 recursos (`stream`, `catalog`, `meta`) y 4 catálogos,
+igual que Addon Latam:
+
+- **Nuvio Latino** (búsqueda obligatoria) para películas y series → scrapea el
+  buscador `/?s=` de las fuentes WP latinas (Cinecalidad → Pelis4Du → DoDoPlay →
+  SeriesLatino, con failover automático entre espejos sanos).
+- **Nuevos Estrenos** para películas y series → lee `/estrenos`, `/ultimos` o la
+  portada del sitio.
+- Al abrir una tarjeta del catálogo (id propio `lat:`/`las:`), el recurso `meta`
+  muestra la ficha (título/poster desde og tags) y `stream` scrapea esa misma URL
+  en busca de .m3u8/.mp4/embeds.
+- Los títulos con ID IMDb normal (tt…) siguen usando los 9 scrapers en paralelo.
+
+Nota: el addon no usa token; si quieres exponerlo como ellos
+(`https://tu-dominio/manifest.json`), despliega en Railway/Render/VPS y ponlo
+detrás de un reverse proxy con HTTPS (duckdns también sirve).

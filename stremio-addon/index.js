@@ -28,13 +28,19 @@ const DIRECT_HTTP_LINKS = [
 
 const manifest = {
   id: 'dev.nuvio.latino',
-  version: '2.0.0',
+  version: '2.1.0',
   name: 'Nuvio Latino (Scraper)',
-  description: 'Streams en español latino (solo HTTPS/embed): scraping de fuentes de pelis y series latinas. Sin torrents.',
-  resources: ['stream'],
+  description: 'Streams en español latino para películas y series (solo HTTPS/embed). Incluye búsqueda y nuevos estrenos. Sin torrents.',
+  logo: 'https://archive.org/download/liddoy_20260714/ppped1d0s/logo.png',
+  resources: ['stream', 'catalog', 'meta'],
   types: ['movie', 'series'],
-  idPrefixes: ['tt', 'vk', 'trk'],
-  catalogs: [],
+  idPrefixes: ['tt', 'vk', 'trk', 'lat', 'las'],
+  catalogs: [
+    { type: 'movie', id: 'nuviolatino-search-movie', name: 'Nuvio Latino', extra: [{ name: 'search', isRequired: true }] },
+    { type: 'series', id: 'nuviolatino-search-series', name: 'Nuvio Latino', extra: [{ name: 'search', isRequired: true }] },
+    { type: 'movie', id: 'nuviolatino-new-releases-movie', name: 'Nuevos Estrenos' },
+    { type: 'series', id: 'nuviolatino-new-releases-series', name: 'Nuevos Estrenos' },
+  ],
   behaviorHints: { configurable: false }
 };
 
@@ -43,6 +49,29 @@ const builder = new addonBuilder(manifest);
 // Scrapers de fuentes en español latino (ver lib/scrape.js)
 const { scrapeAll, SCRAPER_CONFIG } = require('./lib/scrape');
 const { startHealthCheck, getHealthReport } = require('./lib/health');
+const { defineCatalog, defineMeta } = require('./lib/catalog');
+
+// ---- RESOURCE: catalog (búsqueda + nuevos estrenos, estilo Addon Latam) ----
+builder.defineCatalogHandler(async ({ type, id, extra }) => {
+  if (!id.startsWith('nuviolatino-')) return { metas: [] };
+  try {
+    return await defineCatalog(type, id, extra);
+  } catch (e) {
+    console.error('[catalog]', e.message);
+    return { metas: [] };
+  }
+});
+
+// ---- RESOURCE: meta (ficha básica de ids propios lat:/las:) -----------------
+builder.defineMetaHandler(async ({ type, id }) => {
+  if (!/^la[ts]:/.test(id)) return null; // los tt* los resuelve Cinemeta
+  try {
+    return await defineMeta(type, id);
+  } catch (e) {
+    console.error('[meta]', e.message);
+    return null;
+  }
+});
 
 // Health-check: cada 15 min verifica qué dominios espejo siguen vivos.
 // Si un sitio se cae o cambia de dominio, agrega el nuevo espejo en
@@ -74,6 +103,29 @@ function getHttpStreams(type, id) {
 }
 
 builder.defineStreamHandler(async ({ type, id }) => {
+  // 0) IDs propios del catálogo (lat:/las:) -> scrapear la ficha directamente
+  if (/^la[ts]:/.test(id)) {
+    const parts = String(id).split(':');
+    const siteId = parts[1];
+    const href = decodeURIComponent(parts.slice(2).join(':'));
+    const cfg = SCRAPER_CONFIG[siteId];
+    let streams = [];
+    if (cfg) {
+      try {
+        const html = await require('./util').browserFetch(href);
+        const { extractDirectLinks, extractEmbeds, streamFromUrl } = require('./core');
+        for (const u of extractDirectLinks(html)) streams.push(streamFromUrl(u, `🌎 ${siteId}`, 'LATINO'));
+        for (const u of extractEmbeds(html, href.replace(/[^/]*$/, ''))) {
+          if (/youtube|facebook|twitter|ads/i.test(u)) continue;
+          streams.push({ name: `🌎 ${siteId}`, title: `Servidor · embed`, externalUrl: u, behaviorHints: { notWebReady: true } });
+        }
+      } catch (e) {
+        console.error('[stream:catalog-id]', e.message);
+      }
+    }
+    return { streams };
+  }
+
   // 1) Obtener metadatos (título en español, temporada/episodio) para poder buscar
   //    en las fuentes latinas. Stremio envía el ID de IMDb; consultamos Cinemeta.
   let meta = { name: null };
