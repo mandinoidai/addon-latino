@@ -1,6 +1,6 @@
 // Addon Stremio: SOLO streams HTTP/HTTPS (scraping de fuentes latinas + enlaces directos)
 // Sin torrents: nada de infoHash/magnet; todo se sirve por URL directa o embed.
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const { addonBuilder } = require('stremio-addon-sdk');
 
 // ---- CONFIGURACIÓN EDITABLE -------------------------------------------------
 // (Se eliminó la fuente de torrents a pedido: todo es HTTPS/embed ahora)
@@ -171,28 +171,45 @@ function parseSeasonEpisode(id) {
 module.exports = builder.getInterface();
 
 if (require.main === module) {
-  const http = require('http');
-  serveHTTP(builder.getInterface(), { port: process.env.PORT || 7000 });
+  const express = require('express');
+  const { getRouter } = require('stremio-addon-sdk'); // router del SDK: /manifest.json, /stream/..., /catalog/...
 
-  // Ruta extra: /health -> reporte JSON del estado de las fuentes
-  // (no interfiere con /manifest.json, /stream/... que maneja el SDK)
-  const server = http.createServer((req, res) => {
-    if (req.url === '/health') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(getHealthReport(), null, 2));
-    } else {
-      res.writeHead(404).end();
-    }
+  const app = express();
+
+  // Página de aterrizaje con botón "Instalar" (stremio://deep-links.install)
+  app.get(['/', '/addon.html'], (req, res) => {
+    const base = `${req.protocol}://${req.get('host')}`;
+    const manifestUrl = `${base}/manifest.json`;
+    res.type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${manifest.name}</title>
+<style>body{font-family:system-ui;background:#12131a;color:#fff;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
+.card{background:#1b1c24;border-radius:16px;padding:32px;max-width:480px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+img{width:72px;height:72px;border-radius:12px}h1{font-size:20px;margin:12px 0 4px}p{color:#9aa;font-size:14px}
+a.btn{display:inline-block;margin-top:16px;background:#7b5ff0;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600}
+a.btn:hover{background:#8f76ff}code{background:#000;padding:2px 6px;border-radius:4px;font-size:12px;color:#cde}</style></head>
+<body><div class="card"><img src="${manifest.logo}" alt="logo">
+<h1>${manifest.name} v${manifest.version}</h1>
+<p>${manifest.description}</p>
+<a class="btn" href="stremio://${req.get('host')}/manifest.json">➕ Instalar en Stremio</a>
+<p style="margin-top:18px">O pega esta URL en Stremio → Addons → Community addons:<br><code>${manifestUrl}</code></p>
+<p><a href="/health" style="color:#7b5ff0">Estado de las fuentes (/health)</a></p>
+</div></body></html>`);
   });
-  // El SDK ya ocupa el puerto; servimos /health en uno secundario si se configura
-  if (process.env.HEALTH_PORT) {
-    server.listen(+process.env.HEALTH_PORT, () =>
-      console.log(`Reporte de salud de fuentes en http://localhost:${process.env.HEALTH_PORT}/health`)
-    );
-    if (server.unref) server.unref();
-  }
 
-  console.log('Addon corriendo en http://localhost:7000/manifest.json');
-  console.log('Instálalo en Stremio: http://localhost:7000/addon.html');
-  console.log('Fuentes latinas (solo HTTPS/embed):', Object.keys(SCRAPER_CONFIG).join(', '));
+  // Reporte de salud de las fuentes (ya no necesita HEALTH_PORT)
+  app.get('/health', (req, res) => {
+    res.json(getHealthReport());
+  });
+
+  // Rutas del addon del SDK: /manifest.json, /stream/..., /catalog/..., /meta/...
+  app.use('/', getRouter(builder.getInterface()));
+
+  const PORT = process.env.PORT || 7000;
+  app.listen(PORT, () => {
+    console.log(`Addon corriendo en http://localhost:${PORT}/manifest.json`);
+    console.log(`Página de instalación: http://localhost:${PORT}/addon.html`);
+    console.log(`Salud de fuentes:      http://localhost:${PORT}/health`);
+    console.log('Fuentes latinas (solo HTTPS/embed):', Object.keys(SCRAPER_CONFIG).join(', '));
+  });
 }
