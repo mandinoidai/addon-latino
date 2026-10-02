@@ -33,21 +33,40 @@ async function scrapeWpLatino(siteName, emoji, type, meta, cfg) {
   } catch { return []; }
 
   // Primeras fichas relevantes (título coincide parcial o totalmente)
-  const re = /<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>([^<]{3,120})<\/a>/gi;
+  const re = /<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi;
   const wanted = slugify(meta.name);
   const candidates = [];
   let m;
   while ((m = re.exec(page.html)) !== null) {
-    const href = m[1], text = cleanText(m[2]);
-    if (!/\/(pelicula|serie|movie|tv-show|ver)/i.test(href)) continue;
-    const s = slugify(text);
+    const href = m[1];
+    const text = cleanText(m[2].replace(/<[^>]+>/g, ' '));
+    if (!/\/(pelicula|serie|movie|tv-show|ver|capitulo|temporada)/i.test(href)) continue;
+    const s = slugify(text || decodeURIComponent(href.split('/').filter(Boolean).pop() || ''));
     if (!s || !(s.includes(wanted) || wanted.includes(s))) continue;
     if (!candidates.some(c => c.href === href)) candidates.push({ href, text });
-    if (candidates.length >= 2) break;
+    if (candidates.length >= 3) break;
+  }
+
+  // Para series: si ninguna ficha del buscador coincide, derivar URL directa
+  // p.ej. https://sitio/serie/the-pitt/temporada-1/capitulo-15 (variantes comunes)
+  const season = meta.season ?? 1, episode = meta.episode ?? 1;
+  if (type === 'series' && candidates.length === 0) {
+    const slug = slugify(meta.name);
+    const derived = [
+      `/serie/${slug}/temporada-${season}/capitulo-${episode}`,
+      `/serie/${slug}-temporada-${season}-capitulo-${episode}`,
+      `/serie/${slug}-${season}x${String(episode).padStart(2, '0')}`,
+      `/serie/${slug}/${season}/episodio-${episode}`,
+      `/pelicula/${slug}`, // algunas series se listan como película (sin ep)
+    ];
+    try {
+      const d = await fetchFirstAvailable(derived, cfg);
+      candidates.push({ href: d.url, text: meta.name });
+    } catch { /* sin suerte */ }
   }
 
   const streams = [];
-  for (const c of candidates.slice(0, 2)) {
+  for (const c of candidates.slice(0, 3)) {
     let html = page.html;
     if (c.href !== page.url) {
       try { html = await browserFetch(c.href); } catch { continue; }
