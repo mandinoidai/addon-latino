@@ -4,8 +4,11 @@
 // agrega otro dominio espejo en SCRAPER_CONFIG o un nuevo scraper con la misma firma.
 
 const { slugify, cleanText, guessQuality, sortStreams, hostOf, browserFetch } = require('./util');
+const { sortedBases } = require('./health');
 
 // ---- CONFIG --------------------------------------------------------------
+// Para AGREGAR una fuente nueva: añade una entrada aquí con sus dominios
+// espejo y registra su scraper en la lista SCRAPERS (misma firma).
 const SCRAPER_CONFIG = {
   peliculify: {
     enabled: true,
@@ -22,10 +25,11 @@ const SCRAPER_CONFIG = {
 };
 // ---------------------------------------------------------------------------
 
-// Prueba varios dominios espejo hasta que uno responda
+// Prueba varios dominios espejo hasta que uno responda.
+// Usa el orden del health-check: dominios sanos primero, caídos al final.
 async function fetchFirstAvailable(paths, cfg) {
   let lastErr;
-  for (const base of cfg.baseUrls) {
+  for (const base of sortedBases(cfg.baseUrls)) {
     for (const p of paths) {
       const url = base + p;
       try {

@@ -66,3 +66,20 @@ noveleria:  { enabled: true, baseUrls: ['https://noveleria.net'] },
 - Usa esto solo con contenido que tengas derecho a ver (la mayoría de estas fuentes alojan
   contenido con derechos de autor; úsalo bajo tu responsabilidad).
 
+
+## Salud de fuentes (health-check)
+
+El addon verifica automáticamente cada 15 min qué dominios espejo siguen vivos (`lib/health.js`).
+Los sanos se prueban primero al scrapear; los caídos van al final y se re-intentan en cada ronda.
+
+- Cambiar intervalo: `HEALTH_INTERVAL_MIN=10 npm start`
+- Ver reporte JSON: `HEALTH_PORT=7056 npm start` → http://localhost:7056/health
+
+### Cuando una fuente se cae
+1. Revisa `/health` para ver cuál está `ok:false`.
+2. Busca el dominio espejo nuevo del sitio (Google: "<sitio> dominio nuevo", su Telegram/Twitter, foros como Reddit/Stremio apps latinas).
+3. Edita `SCRAPER_CONFIG` en `lib/scrape.js`: agrega el nuevo dominio a `baseUrls` (o deshabilita la fuente con `enabled: false`).
+4. Reinicia el servidor. No hace falta tocar nada más.
+
+Si un sitio cambia tanto que el scraper ya no extrae enlaces (aunque el dominio responda),
+ese scraper necesita actualización de selectores/regex: revisa el HTML con `curl` y ajusta la función.

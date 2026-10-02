@@ -44,7 +44,15 @@ const manifest = {
 const builder = new addonBuilder(manifest);
 
 // Scrapers de fuentes en español latino (ver lib/scrape.js)
-const { scrapeAll } = require('./lib/scrape');
+const { scrapeAll, SCRAPER_CONFIG } = require('./lib/scrape');
+const { startHealthCheck, getHealthReport } = require('./lib/health');
+
+// Health-check: cada 15 min verifica qué dominios espejo siguen vivos.
+// Si un sitio se cae o cambia de dominio, agrega el nuevo espejo en
+// SCRAPER_CONFIG (lib/scrape.js) y reinicia; los sanos se prueban primero.
+if (require.main === module) {
+  startHealthCheck(SCRAPER_CONFIG, +(process.env.HEALTH_INTERVAL_MIN || 15));
+}
 
 // Utilidad: normaliza calidad desde el nombre del archivo
 function guessQuality(name) {
@@ -136,9 +144,30 @@ function parseSeasonEpisode(id) {
 module.exports = builder.getInterface();
 
 if (require.main === module) {
+  const http = require('http');
   serveHTTP(builder.getInterface(), { port: process.env.PORT || 7000 });
+
+  // Ruta extra: /health -> reporte JSON del estado de las fuentes
+  // (no interfiere con /manifest.json, /stream/... que maneja el SDK)
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(getHealthReport(), null, 2));
+    } else {
+      res.writeHead(404).end();
+    }
+  });
+  // El SDK ya ocupa el puerto; servimos /health en uno secundario si se configura
+  if (process.env.HEALTH_PORT) {
+    server.listen(+process.env.HEALTH_PORT, () =>
+      console.log(`Reporte de salud de fuentes en http://localhost:${process.env.HEALTH_PORT}/health`)
+    );
+    if (server.unref) server.unref();
+  }
+
   console.log('Addon corriendo en http://localhost:7000/manifest.json');
   console.log('Instálalo en Stremio: http://localhost:7000/addon.html');
+  console.log('Fuentes configuradas:', Object.keys(SCRAPER_CONFIG).join(', '), '+ Torrentio + HTTP directo');
   if (!TORRENT_SOURCE_MANIFEST) {
     console.log('AVISO: sin TORRENT_SOURCE configurado, solo se sirven los enlaces HTTP locales.');
   }
