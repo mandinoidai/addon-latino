@@ -1,14 +1,11 @@
-// Addon Stremio: entrega streams Torrent (magnet) y HTTP/HTTPS
-// Compatible con Stremio (escritorio soporta magnet; Android también vía WebTorrent)
-const { addonBuilder, serveHTTP, getManifest } = require('stremio-addon-sdk');
+// Addon Stremio: SOLO streams HTTP/HTTPS (scraping de fuentes latinas + enlaces directos)
+// Sin torrents: nada de infoHash/magnet; todo se sirve por URL directa o embed.
+const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
 // ---- CONFIGURACIÓN EDITABLE -------------------------------------------------
-// 1) Torrentio: agrega torrents reales desde YTS/Publico/etc.
-//    Pega la URL de tu manifest de Torrentio (o de cualquier addon que ya dé torrents).
-//    Ej: https://torrentio.strem.fun/manifest.json
-const TORRENT_SOURCE_MANIFEST = process.env.TORRENT_SOURCE || '';
+// (Se eliminó la fuente de torrents a pedido: todo es HTTPS/embed ahora)
 
-// 2) Lista estática de enlaces directos HTTP/HTTPS (mp4/mkv/ts...).
+// Lista estática de enlaces directos HTTP/HTTPS (mp4/mkv/ts...).
 //    Formato: { name, url, type: 'movie'|'series', imdb?: 'tt0000000', season?, episode? }
 const DIRECT_HTTP_LINKS = [
   // --- Película de ejemplo (Big Buck Bunny, dominio público) ---
@@ -33,7 +30,7 @@ const manifest = {
   id: 'dev.nuvio.latino',
   version: '2.0.0',
   name: 'Nuvio Latino (Scraper)',
-  description: 'Streams en español latino: scraping de fuentes de pelis/series + torrents + HTTP directo.',
+  description: 'Streams en español latino (solo HTTPS/embed): scraping de fuentes de pelis y series latinas. Sin torrents.',
   resources: ['stream'],
   types: ['movie', 'series'],
   idPrefixes: ['tt', 'vk', 'trk'],
@@ -62,27 +59,6 @@ function guessQuality(name) {
   if (n.includes('720')) return '720p';
   if (n.includes('480')) return '480p';
   return null;
-}
-
-// Fuente remota de torrents (ej. Torrentio). Convierte su respuesta en streams válidos.
-async function getTorrentStreams(type, id) {
-  if (!TORRENT_SOURCE_MANIFEST) return [];
-  try {
-    const mUrl = TORRENT_SOURCE_MANIFEST.replace('manifest.json', '') + `stream/${type}/${id}.json`;
-    const res = await fetch(mUrl);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.streams || []).map(s => ({
-      name: s.name || 'Torrent',
-      description: s.description || '',
-      behaviorHints: s.behaviorHints || {},
-      ...(s.url ? { url: s.url } : {}),
-      ...(s.infoHash ? { infoHash: s.infoHash, fileIdx: s.fileIdx ?? 0 } : {})
-    }));
-  } catch (e) {
-    console.error('Error obteniendo torrents de fuente remota:', e.message);
-    return [];
-  }
 }
 
 // Streams HTTP/HTTPS directos desde la lista local
@@ -114,8 +90,7 @@ builder.defineStreamHandler(async ({ type, id }) => {
     console.error('Cinemeta falló:', e.message);
   }
 
-  const [torrents, http, latino] = await Promise.all([
-    getTorrentStreams(type, id),
+  const [http, latino] = await Promise.all([
     Promise.resolve(getHttpStreams(type, id)),
     meta.name ? scrapeAll(type, { ...meta, season: parseSeasonEpisode(id) }).catch((e) => {
       console.error('Scraping latino error:', e.message);
@@ -124,7 +99,7 @@ builder.defineStreamHandler(async ({ type, id }) => {
   ]);
 
   // Si el scraper no encontró nada por título, agregar un stream informativo
-  const streams = [...latino, ...http, ...torrents];
+  const streams = [...latino, ...http];
   if (!streams.length) {
     streams.push({
       name: 'Nuvio Latino',
@@ -167,8 +142,5 @@ if (require.main === module) {
 
   console.log('Addon corriendo en http://localhost:7000/manifest.json');
   console.log('Instálalo en Stremio: http://localhost:7000/addon.html');
-  console.log('Fuentes configuradas:', Object.keys(SCRAPER_CONFIG).join(', '), '+ Torrentio + HTTP directo');
-  if (!TORRENT_SOURCE_MANIFEST) {
-    console.log('AVISO: sin TORRENT_SOURCE configurado, solo se sirven los enlaces HTTP locales.');
-  }
+  console.log('Fuentes latinas (solo HTTPS/embed):', Object.keys(SCRAPER_CONFIG).join(', '));
 }

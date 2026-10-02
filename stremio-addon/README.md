@@ -1,18 +1,17 @@
 # Nuvio Latino Addon (Stremio) — Scraper de fuentes en español latino
 
 Addon para **Stremio** que **escrapea fuentes de pelis y series en español latino**
-(Peliculify, Noveleria) y además puede reenviar **Torrents** (vía Torrentio u otro addon)
-y **HTTP/HTTPS directos**. Como Nuvio TV usa el mismo protocolo de addons de Stremio,
-puedes apuntar esa app al manifest.
+servido **exclusivamente por HTTPS/EMBED** (sin torrents, sin magnet, sin infoHash).
+Fuentes actuales: **Peliculify**, **Noveleria**, **Veoh Latino** y **Archive.org**,
+más una lista local de enlaces HTTP directos. Como Nuvio TV usa el mismo protocolo
+de addons de Stremio, puedes apuntar esa app al manifest.
 
 ## Uso rápido
 
 ```bash
 cd stremio-addon
 npm install
-npm start                 # scraping latino + enlaces HTTP locales
-# o con torrents reales además del scraping:
-TORRENT_SOURCE=https://torrentio.strem.fun/manifest.json npm start
+npm start                 # scraping latino (solo HTTPS/embed) + enlaces HTTP locales
 ```
 
 - Manifest: `http://localhost:7000/manifest.json`
@@ -43,7 +42,7 @@ noveleria:  { enabled: true, baseUrls: ['https://noveleria.net'] },
 - **Agregar una fuente nueva**: escribe una función `scrapeMiSitio(type, meta)` que devuelva
   un arreglo de streams y regístrala en `SCRAPERS`. La firma es la misma para todas.
 - **Enlaces HTTP/HTTPS fijos**: edita `DIRECT_HTTP_LINKS` en `index.js`.
-- **Torrents**: variable de entorno `TORRENT_SOURCE` con el manifest de Torrentio/MediaWave.
+- (Eliminado: ya no se reenvían torrents; todo es HTTPS/embed)
 
 ## Publicar para usarlo desde la TV / otros dispositivos
 
@@ -60,9 +59,8 @@ noveleria:  { enabled: true, baseUrls: ['https://noveleria.net'] },
   que el scraping funcione realmente.
 - Los DOMs de estos sitios cambian con frecuencia; puede ser necesario ajustar las regex de
   `lib/scrape.js` (extractDirectLinks/extractEmbeds) con inspeccionar el HTML de una ficha real.
-- Muchos embeds requieren navegador (no reproducen directo en Stremio); los `.m3u8` sí funcionan.
-- Stremio de escritorio reproduce torrents (WebTorrent); en Android/iOS los magnet se abren
-  en un reproductor externo.
+- Muchos embeds requieren navegador (no reproducen directo en Stremio); los `.m3u8`/`.mp4` sí funcionan.
+- Sin torrents: nada de magnet/WebTorrent; todos los streams son URL HTTPS o embed externo.
 - Usa esto solo con contenido que tengas derecho a ver (la mayoría de estas fuentes alojan
   contenido con derechos de autor; úsalo bajo tu responsabilidad).
 
