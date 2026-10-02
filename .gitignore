@@ -1,6 +1,8 @@
-(empty)node_modules/
+node_modules/
 .next/
 dist/
 build/
 *.log
-node_modules/
+.env
+.DS_Store
+package-lock.json.bak

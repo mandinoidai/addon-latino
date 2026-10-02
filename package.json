@@ -1,0 +1,14 @@
+{
+  "name": "addon-latino",
+  "version": "2.1.0",
+  "description": "Addon Stremio/Nuvio con streams HTTPS en español latino (9 fuentes, sin torrents)",
+  "main": "stremio-addon/index.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node stremio-addon/index.js"
+  },
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.10"
+  },
+  "license": "MIT"
+}
