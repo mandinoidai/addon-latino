@@ -1,15 +1,17 @@
-# Nuvio HTTP/Torrent Addon (Stremio)
+# Nuvio Latino Addon (Stremio) — Scraper de fuentes en español latino
 
-Addon para **Stremio** que provee streams **Torrent (magnet)** y **HTTP/HTTPS directos**.
-Como Nuvio TV usa el mismo protocolo de addons de Stremio, puedes apuntar esta app al manifest.
+Addon para **Stremio** que **escrapea fuentes de pelis y series en español latino**
+(Peliculify, Noveleria) y además puede reenviar **Torrents** (vía Torrentio u otro addon)
+y **HTTP/HTTPS directos**. Como Nuvio TV usa el mismo protocolo de addons de Stremio,
+puedes apuntar esa app al manifest.
 
 ## Uso rápido
 
 ```bash
 cd stremio-addon
 npm install
-npm start                 # solo enlaces HTTP locales
-# o con torrents reales vía Torrentio:
+npm start                 # scraping latino + enlaces HTTP locales
+# o con torrents reales además del scraping:
 TORRENT_SOURCE=https://torrentio.strem.fun/manifest.json npm start
 ```
 
@@ -17,13 +19,31 @@ TORRENT_SOURCE=https://torrentio.strem.fun/manifest.json npm start
 - Página de instalación: `http://localhost:7000/addon.html`
 - En Stremio: `Complementos → Añadir complemento por URL → http://localhost:7000/manifest.json`
 
-## Configuración (index.js)
+## Cómo funciona el scraping (lib/scrape.js)
 
-1. **Torrents**: define `TORRENT_SOURCE` (variable de entorno) con la URL del manifest de
-   un addon que ya dé torrents (Torrentio, MediaWave, etc.). El addon reenvía sus streams.
-2. **Enlaces HTTP/HTTPS**: edita el arreglo `DIRECT_HTTP_LINKS` con tus URLs directas
-   (mp4/mkv/ts). Cada entrada necesita `imdb` (`tt...`) para asociarse a una película/serie,
-   o quítalo para que aparezca en TODO el catálogo.
+1. Stremio pide streams por ID de IMDb → el addon consulta **Cinemeta** para obtener el
+   título en español (los títulos de estos sitios suelen estar en latino).
+2. Cada scraper busca la ficha por slug (`/pelicula/<titulo>` , `/serie/<titulo>-temporada-N-capitulo-M`)
+   o por su buscador interno (`?s=<titulo>`).
+3. Extrae enlaces directos `.m3u8`/`.mp4` (se ordenan por calidad detectada: 4K/1080p/720p…)
+   y también embeds de servidores (aparecen como "Latino Embed").
+4. Todo se agrega, deduplica y devuelve como streams de Stremio.
+
+## Configuración de fuentes
+
+Edita `SCRAPER_CONFIG` en `lib/scrape.js`:
+
+```js
+peliculify: { enabled: true, baseUrls: ['https://www.peliculify.com', ...] },
+noveleria:  { enabled: true, baseUrls: ['https://noveleria.net'] },
+```
+
+- **Dominios espejo**: estos sitios cambian de dominio cada cierto tiempo; si uno deja de
+  responder, agrega el nuevo dominio a `baseUrls` o desactívalo con `enabled: false`.
+- **Agregar una fuente nueva**: escribe una función `scrapeMiSitio(type, meta)` que devuelva
+  un arreglo de streams y regístrala en `SCRAPERS`. La firma es la misma para todas.
+- **Enlaces HTTP/HTTPS fijos**: edita `DIRECT_HTTP_LINKS` en `index.js`.
+- **Torrents**: variable de entorno `TORRENT_SOURCE` con el manifest de Torrentio/MediaWave.
 
 ## Publicar para usarlo desde la TV / otros dispositivos
 
@@ -32,9 +52,17 @@ TORRENT_SOURCE=https://torrentio.strem.fun/manifest.json npm start
 - Internet: sube el proyecto a Railway/Render/VPS y usa el dominio HTTPS resultante.
 - Túnel temporal: `npx cloudflared tunnel --url http://localhost:7000`.
 
-## Notas
+## Notas y limitaciones
 
+- **Verificado desde este entorno**: los sitios de scraping están protegidos por Cloudflare
+  y/o bloquean IPs de datacenter, por lo que aquí devuelven 0 streams; el pipeline de parseo
+  está probado con HTML simulado. Ejecuta el servidor en tu casa/VPN (IP residencial) para
+  que el scraping funcione realmente.
+- Los DOMs de estos sitios cambian con frecuencia; puede ser necesario ajustar las regex de
+  `lib/scrape.js` (extractDirectLinks/extractEmbeds) con inspeccionar el HTML de una ficha real.
+- Muchos embeds requieren navegador (no reproducen directo en Stremio); los `.m3u8` sí funcionan.
 - Stremio de escritorio reproduce torrents (WebTorrent); en Android/iOS los magnet se abren
-  en un reproductor externo si está instalado.
-- Los enlaces HTTP deben permitir CORS o ser reproducibles directo; HLS usa `.m3u8`.
-- Usa esto solo con contenido que tengas derecho a ver.
+  en un reproductor externo.
+- Usa esto solo con contenido que tengas derecho a ver (la mayoría de estas fuentes alojan
+  contenido con derechos de autor; úsalo bajo tu responsabilidad).
+

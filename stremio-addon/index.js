@@ -30,10 +30,10 @@ const DIRECT_HTTP_LINKS = [
 // -----------------------------------------------------------------------------
 
 const manifest = {
-  id: 'dev.nuvio.http-torrent',
-  version: '1.0.0',
-  name: 'Nuvio HTTP/Torrent Provider',
-  description: 'Proporciona streams Torrent (magnet) y HTTP/HTTPS a Stremio/Nuvio TV.',
+  id: 'dev.nuvio.latino',
+  version: '2.0.0',
+  name: 'Nuvio Latino (Scraper)',
+  description: 'Streams en español latino: scraping de fuentes de pelis/series + torrents + HTTP directo.',
   resources: ['stream'],
   types: ['movie', 'series'],
   idPrefixes: ['tt', 'vk', 'trk'],
@@ -42,6 +42,9 @@ const manifest = {
 };
 
 const builder = new addonBuilder(manifest);
+
+// Scrapers de fuentes en español latino (ver lib/scrape.js)
+const { scrapeAll } = require('./lib/scrape');
 
 // Utilidad: normaliza calidad desde el nombre del archivo
 function guessQuality(name) {
@@ -87,12 +90,48 @@ function getHttpStreams(type, id) {
 }
 
 builder.defineStreamHandler(async ({ type, id }) => {
-  const [torrents, http] = await Promise.all([
+  // 1) Obtener metadatos (título en español, temporada/episodio) para poder buscar
+  //    en las fuentes latinas. Stremio envía el ID de IMDb; consultamos Cinemeta.
+  let meta = { name: null };
+  try {
+    const r = await fetch(`https://v3-cinemeta.strem.io/meta/${type}/${id}.json`);
+    if (r.ok) {
+      const d = await r.json();
+      if (d && d.meta) {
+        // background suele traer "Latino" / "Español" cuando hay audio LAT
+        meta = { name: d.meta.name, background: d.meta.background };
+      }
+    }
+  } catch (e) {
+    console.error('Cinemeta falló:', e.message);
+  }
+
+  const [torrents, http, latino] = await Promise.all([
     getTorrentStreams(type, id),
-    Promise.resolve(getHttpStreams(type, id))
+    Promise.resolve(getHttpStreams(type, id)),
+    meta.name ? scrapeAll(type, { ...meta, season: parseSeasonEpisode(id) }).catch((e) => {
+      console.error('Scraping latino error:', e.message);
+      return [];
+    }) : Promise.resolve([]),
   ]);
-  return { streams: [...http, ...torrents] };
+
+  // Si el scraper no encontró nada por título, agregar un stream informativo
+  const streams = [...latino, ...http, ...torrents];
+  if (!streams.length) {
+    streams.push({
+      name: 'Nuvio Latino',
+      title: 'No se encontraron fuentes para este título. Prueba con títulos populares o revisa lib/scrape.js (los dominios cambian seguido).',
+      externalUrl: 'https://www.peliculify.com',
+    });
+  }
+  return { streams };
 });
+
+// Stremio usa ids tipo "tt1234:1:2" para series (imdb:temporada:episodio)
+function parseSeasonEpisode(id) {
+  const parts = String(id).split(':');
+  return parts.length === 3 ? { season: +parts[1], episode: +parts[2] } : {};
+}
 
 module.exports = builder.getInterface();
 
